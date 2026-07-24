@@ -10,3 +10,5 @@
         //keep that new item in the array.
         //once presented, if answered incorrectly, repeat process until it is answere correctly.
         //If answered correcty, add new item, etc until original object is empty.
+
+        //https://github.com/JavierHernan/Brute-Force-Memorization-Game/issues?q=is%3Aissue+updated%3A%3E%40today-1w+sort%3Aupdated-desc
