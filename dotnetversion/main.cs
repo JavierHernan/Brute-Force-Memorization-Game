@@ -240,3 +240,10 @@ class Program
         }
     }
 }
+
+//make folder
+//put code into folder Program.cs
+//open cmd powershell then run this:
+//dotnet new console --force
+//Then run this:
+//dotnet run
