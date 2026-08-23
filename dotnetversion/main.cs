@@ -1,245 +1,224 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+# Ports & Protocols Memorization Game
+# Pure PowerShell - no extra packages required
 
-// ─── Protocol model ──────────────────────────────────────────────────────────
-record Protocol(string Abbr, string? Full, int[] Ports);
+$Protocols = @(
+    @{ Abbr = "HTTP";  Full = "HyperText Transfer Protocol"; Ports = @(80) },
+    @{ Abbr = "HTTPS"; Full = "HyperText Transfer Protocol Secure"; Ports = @(443) },
+    @{ Abbr = "SMTP";  Full = "Simple Mail Transfer Protocol"; Ports = @(25) },
+    @{ Abbr = "SMTPS"; Full = "Simple Mail Transfer Protocol Secure"; Ports = @(465, 587) },
+    @{ Abbr = "POP3";  Full = "Post Office Protocol version 3"; Ports = @(110) },
+    @{ Abbr = "POP3S"; Full = "Post Office Protocol version 3 Secure"; Ports = @(995) },
+    @{ Abbr = "IMAP";  Full = "Internet Message Access Protocol"; Ports = @(143) },
+    @{ Abbr = "IMAPS"; Full = "Internet Message Access Protocol Secure"; Ports = @(993) },
+    @{ Abbr = "SSH";   Full = "Secure Shell"; Ports = @(22) },
+    @{ Abbr = "SFTP";  Full = "SSH File Transfer Protocol"; Ports = @(22) },
+    @{ Abbr = "Telnet";Full = "Telecommunication Network"; Ports = @(23) },
+    @{ Abbr = "RDP";   Full = "Remote Desktop Protocol"; Ports = @(3389) },
+    @{ Abbr = "FTP";   Full = "File Transfer Protocol"; Ports = @(20, 21) },
+    @{ Abbr = "TFTP";  Full = "Trivial File Transfer Protocol"; Ports = @(69) },
+    @{ Abbr = "DNS";   Full = "Domain Name System"; Ports = @(53) },
+    @{ Abbr = "DHCP";  Full = "Dynamic Host Configuration Protocol"; Ports = @(67, 68) },
+    @{ Abbr = "LDAP";  Full = "Lightweight Directory Access Protocol"; Ports = @(389) },
+    @{ Abbr = "LDAPS"; Full = "Lightweight Directory Access Protocol Secure"; Ports = @(636) },
+    @{ Abbr = "SQL Service (MSSQL)"; Full = "Microsoft SQL Server"; Ports = @(1433) },
+    @{ Abbr = "SQL Service (MySQL)"; Full = "MySQL Server"; Ports = @(3306) },
+    @{ Abbr = "SNMP";  Full = "Simple Network Management Protocol"; Ports = @(161, 162) },
+    @{ Abbr = "SysLog";Full = "System Logging Protocol"; Ports = @(514) },
+    @{ Abbr = "NTP";   Full = "Network Time Protocol"; Ports = @(123) },
+    @{ Abbr = "SIP";   Full = "Session Initiation Protocol"; Ports = @(5060, 5061) },
+    @{ Abbr = "H.323"; Full = $null; Ports = @(1720) },
+    @{ Abbr = "SMB and CIFS"; Full = "Server Message Block / Common Internet File System"; Ports = @(445) },
+    @{ Abbr = "NetBIOS and NetBT"; Full = "Network Basic Input/Output System"; Ports = @(137, 138, 139) }
+)
 
-class Program
-{
-    // ─── Protocol data ───────────────────────────────────────────────────────
-    static readonly List<Protocol> Protocols = new()
-    {
-        new("HTTP", "HyperText Transfer Protocol", new[] { 80 }),
-        new("HTTPS", "HyperText Transfer Protocol Secure", new[] { 443 }),
-        new("SMTP", "Simple Mail Transfer Protocol", new[] { 25 }),
-        new("SMTPS", "Simple Mail Transfer Protocol Secure", new[] { 465, 587 }),
-        new("POP3", "Post Office Protocol version 3", new[] { 110 }),
-        new("POP3S", "Post Office Protocol version 3 Secure", new[] { 995 }),
-        new("IMAP", "Internet Message Access Protocol", new[] { 143 }),
-        new("IMAPS", "Internet Message Access Protocol Secure", new[] { 993 }),
-        new("SSH", "Secure Shell", new[] { 22 }),
-        new("SFTP", "SSH File Transfer Protocol", new[] { 22 }),
-        new("Telnet", "Telecommunication Network", new[] { 23 }),
-        new("RDP", "Remote Desktop Protocol", new[] { 3389 }),
-        new("FTP", "File Transfer Protocol", new[] { 20, 21 }),
-        new("TFTP", "Trivial File Transfer Protocol", new[] { 69 }),
-        new("DNS", "Domain Name System", new[] { 53 }),
-        new("DHCP", "Dynamic Host Configuration Protocol", new[] { 67, 68 }),
-        new("LDAP", "Lightweight Directory Access Protocol", new[] { 389 }),
-        new("LDAPS", "Lightweight Directory Access Protocol Secure", new[] { 636 }),
-        new("SQL Service (MSSQL)", "Microsoft SQL Server", new[] { 1433 }),
-        new("SQL Service (MySQL)", "MySQL Server", new[] { 3306 }),
-        new("SNMP", "Simple Network Management Protocol", new[] { 161, 162 }),
-        new("SysLog", "System Logging Protocol", new[] { 514 }),
-        new("NTP", "Network Time Protocol", new[] { 123 }),
-        new("SIP", "Session Initiation Protocol", new[] { 5060, 5061 }),
-        new("H.323", null, new[] { 1720 }),
-        new("SMB and CIFS", "Server Message Block / Common Internet File System", new[] { 445 }),
-        new("NetBIOS and NetBT", "Network Basic Input/Output System", new[] { 137, 138, 139 }),
-    };
+function Shuffle($list) {
+    $a = @($list)
+    for ($i = $a.Count - 1; $i -gt 0; $i--) {
+        $j = Get-Random -Maximum ($i + 1)
+        $temp = $a[$i]
+        $a[$i] = $a[$j]
+        $a[$j] = $temp
+    }
+    return $a
+}
 
-    static readonly Random Rng = new();
+function Normalize-Ports($input) {
+    $nums = $input -split '[/\-\s,]+' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -match '^\d+$' } |
+            ForEach-Object { [int]$_ } |
+            Where-Object { $_ -gt 0 -and $_ -le 65535 } |
+            Select-Object -Unique |
+            Sort-Object
+    return @($nums)
+}
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
-    static List<T> Shuffle<T>(IEnumerable<T> source)
-    {
-        var list = source.ToList();
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = Rng.Next(i + 1);
-            (list[i], list[j]) = (list[j], list[i]);
-        }
-        return list;
+function Ports-Equal($a, $b) {
+    $sortedB = @($b | Sort-Object)
+    if ($a.Count -ne $sortedB.Count) { return $false }
+    for ($i = 0; $i -lt $a.Count; $i++) {
+        if ($a[$i] -ne $sortedB[$i]) { return $false }
+    }
+    return $true
+}
+
+function Canonical-Ports($ports) {
+    return ($ports | Sort-Object) -join "/"
+}
+
+function Display-Name($proto) {
+    if ($proto.Full) { return "$($proto.Abbr) - $($proto.Full)" }
+    else { return $proto.Abbr }
+}
+
+function Ask-Protocol($proto, $isReview = $false) {
+    $expected = @($proto.Ports | Sort-Object)
+    $canon = Canonical-Ports $expected
+    $name = Display-Name $proto
+
+    Write-Host ""
+    if ($isReview) {
+        Write-Host "REVIEW --> Protocol: $name"
+    } else {
+        Write-Host "Protocol: $name"
+    }
+    Write-Host "Enter the port number(s) (separate multiple with /, any order is fine):"
+
+    $answer = (Read-Host ">").Trim()
+    if ($answer -eq "" -or $answer -eq "quit") { return $null }
+
+    $userPorts = Normalize-Ports $answer
+
+    if (Ports-Equal $userPorts $expected) {
+        if ($isReview) { Write-Host "  [Correct]" }
+        return $true
     }
 
-    static List<int> NormalizePorts(string input)
-    {
-        return input
-            .Split(new[] { '/', '-', ' ', ',' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => int.TryParse(s.Trim(), out int n) ? n : -1)
-            .Where(n => n > 0 && n <= 65535)
-            .Distinct()
-            .OrderBy(n => n)
-            .ToList();
+    Write-Host ""
+    Write-Host "[Incorrect] The correct answer is: $canon"
+
+    while ($true) {
+        $ack = (Read-Host "Type the correct port(s) to acknowledge").Trim()
+        if ($ack -eq "" -or $ack -eq "quit") { return $null }
+        if (Ports-Equal (Normalize-Ports $ack) $expected) { break }
+        Write-Host "  That does not match. Please type the correct port(s)."
     }
 
-    static bool PortsEqual(List<int> a, int[] b)
-    {
-        var sortedB = b.OrderBy(x => x).ToArray();
-        if (a.Count != sortedB.Length) return false;
-        for (int i = 0; i < a.Count; i++)
-            if (a[i] != sortedB[i]) return false;
-        return true;
+    Read-Host "Press Enter to continue"
+    return $false
+}
+
+function Do-Review($mastered) {
+    if ($mastered.Count -eq 0) { return $true }
+
+    Write-Host ""
+    Write-Host "----------------------------------------"
+    Write-Host "  Reviewing previously mastered protocols"
+    Write-Host "  (shuffled order)"
+    Write-Host "----------------------------------------"
+
+    $reviewList = Shuffle $mastered
+    foreach ($proto in $reviewList) {
+        $result = Ask-Protocol $proto $true
+        if ($null -eq $result) { return $false }
     }
 
-    static string CanonicalPorts(int[] ports) =>
-        string.Join("/", ports.OrderBy(p => p));
+    Write-Host ""
+    Write-Host "-- Review complete --"
+    return $true
+}
 
-    static string DisplayName(Protocol p) =>
-        p.Full is null ? p.Abbr : $"{p.Abbr} - {p.Full}";
+# ─── Main Game ────────────────────────────────────────────────────────────────
+Clear-Host
+Write-Host "======================================================"
+Write-Host "     Ports & Protocols Memorization Game"
+Write-Host "     Brute-force learning through repetition"
+Write-Host "======================================================"
+Write-Host ""
+Write-Host "- Protocols are presented one at a time in random order."
+Write-Host "- Type the port(s) using / as separator (e.g. 20/21)."
+Write-Host "- On a miss you must type the correct answer, then re-answer"
+Write-Host "  every previously mastered protocol before retrying."
+Write-Host "- Score (streak) resets on any incorrect answer."
+Write-Host "- Type `"quit`" at any prompt to exit."
+Write-Host ""
 
-    // ─── Core ask function ───────────────────────────────────────────────────
-    // Returns: true = correct, false = incorrect (but acknowledged), null = quit
-    static bool? AskProtocol(Protocol proto, bool isReview = false)
-    {
-        var expected = proto.Ports.OrderBy(p => p).ToArray();
-        var canon = CanonicalPorts(expected);
-        var name = DisplayName(proto);
+$remaining = @($Protocols)
+$mastered  = @()
+$streak    = 0
+$pendingRetry = $null
+$total     = $Protocols.Count
 
-        Console.WriteLine();
-        Console.WriteLine(isReview
-            ? $"REVIEW → Protocol: {name}"
-            : $"Protocol: {name}");
-        Console.WriteLine("Enter the port number(s) (separate multiple with /, any order is fine):");
+while ($mastered.Count -lt $total) {
 
-        Console.Write("> ");
-        string? answer = Console.ReadLine()?.Trim();
+    if ($null -ne $pendingRetry) {
+        $proto = $pendingRetry
+    }
+    elseif ($remaining.Count -gt 0) {
+        $idx = Get-Random -Maximum $remaining.Count
+        $proto = $remaining[$idx]
+    }
+    else { break }
 
-        if (string.IsNullOrEmpty(answer) || answer.Equals("quit", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        var userPorts = NormalizePorts(answer);
-
-        if (PortsEqual(userPorts, expected))
-        {
-            if (isReview)
-                Console.WriteLine("  ✓ Correct");
-            return true;
-        }
-
-        // Incorrect
-        Console.WriteLine($"\n✗ Incorrect. The correct answer is: {canon}");
-
-        // Force the user to type the correct answer
-        while (true)
-        {
-            Console.Write("Type the correct port(s) to acknowledge: ");
-            string? ack = Console.ReadLine()?.Trim();
-
-            if (string.IsNullOrEmpty(ack) || ack.Equals("quit", StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            if (PortsEqual(NormalizePorts(ack), expected))
-                break;
-
-            Console.WriteLine("  That does not match. Please type the correct port(s).");
-        }
-
-        Console.Write("Press Enter to continue...");
-        Console.ReadLine();
-        return false;
+    if ($null -ne $pendingRetry) {
+        Write-Host ""
+        Write-Host ">>> Retrying the protocol you previously missed <<<"
     }
 
-    // ─── Review helper ───────────────────────────────────────────────────────
-    static bool DoReview(List<Protocol> mastered)
-    {
-        if (mastered.Count == 0) return true;
+    $result = Ask-Protocol $proto
 
-        Console.WriteLine("\n────────────────────────────────────────");
-        Console.WriteLine("  Reviewing previously mastered protocols");
-        Console.WriteLine("  (shuffled order)");
-        Console.WriteLine("────────────────────────────────────────");
-
-        foreach (var proto in Shuffle(mastered))
-        {
-            var result = AskProtocol(proto, isReview: true);
-            if (result is null) return false; // quit
-        }
-
-        Console.WriteLine("\n── Review complete ──");
-        return true;
+    if ($null -eq $result) {
+        Write-Host ""
+        Write-Host "Exiting game. Goodbye!"
+        break
     }
 
-    // ─── Main game loop ──────────────────────────────────────────────────────
-    static void Main()
-    {
-        // Enable UTF-8 so ✓ ✗ and box-drawing characters display correctly
-        Console.OutputEncoding = System.Text.Encoding.UTF8;
-
-        Console.WriteLine("╔══════════════════════════════════════════════════════╗");
-        Console.WriteLine("║     Ports & Protocols Memorization Game              ║");
-        Console.WriteLine("║     Brute-force learning through repetition          ║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════╝");
-        Console.WriteLine();
-        Console.WriteLine("• Protocols are presented one at a time in random order.");
-        Console.WriteLine("• Type the port(s) using / as separator (e.g. 20/21).");
-        Console.WriteLine("• On a miss you must type the correct answer, then re-answer");
-        Console.WriteLine("  every previously mastered protocol before retrying.");
-        Console.WriteLine("• Score (streak) resets on any incorrect answer.");
-        Console.WriteLine("• Type \"quit\" at any prompt to exit.\n");
-
-        var remaining = new List<Protocol>(Protocols);
-        var mastered = new List<Protocol>();
-        int streak = 0;
-        Protocol? pendingRetry = null;
-        int total = Protocols.Count;
-
-        while (mastered.Count < total)
-        {
-            Protocol proto;
-
-            if (pendingRetry is not null)
-            {
-                proto = pendingRetry;
-            }
-            else if (remaining.Count > 0)
-            {
-                int idx = Rng.Next(remaining.Count);
-                proto = remaining[idx];
-            }
-            else break;
-
-            if (pendingRetry is not null)
-                Console.WriteLine("\n>>> Retrying the protocol you previously missed <<<");
-
-            var result = AskProtocol(proto);
-
-            if (result is null)
-            {
-                Console.WriteLine("\nExiting game. Goodbye!");
-                return;
-            }
-
-            if (result == true)
-            {
-                if (pendingRetry is not null)
-                    pendingRetry = null;
-                else
-                    remaining.Remove(proto);
-
-                if (!mastered.Contains(proto))
-                    mastered.Add(proto);
-
-                streak++;
-                Console.WriteLine($"\n✓ Correct!  Streak: {streak}  |  Mastered: {mastered.Count}/{total}");
-            }
-            else
-            {
-                streak = 0;
-                Console.WriteLine($"\nStreak reset to 0.  Mastered so far: {mastered.Count}/{total}");
-
-                if (!DoReview(mastered))
-                {
-                    Console.WriteLine("\nExiting game. Goodbye!");
-                    return;
-                }
-
-                pendingRetry = proto;
-                Console.WriteLine("\nNow retrying the protocol you missed...\n");
-            }
+    if ($result -eq $true) {
+        if ($null -ne $pendingRetry) {
+            $pendingRetry = $null
+        }
+        else {
+            $remaining = @($remaining | Where-Object { $_ -ne $proto })
         }
 
-        if (mastered.Count == total)
-        {
-            Console.WriteLine("\n╔══════════════════════════════════════════════════════╗");
-            Console.WriteLine("║  🎉  Congratulations! You mastered every protocol!   ║");
-            Console.WriteLine("╚══════════════════════════════════════════════════════╝");
-            Console.WriteLine($"Final streak: {streak}");
-            Console.WriteLine($"Total protocols: {total}");
+        if ($mastered -notcontains $proto) {
+            $mastered += $proto
         }
+
+        $streak++
+        Write-Host ""
+        Write-Host "[Correct!]  Streak: $streak  |  Mastered: $($mastered.Count)/$total"
+    }
+    else {
+        $streak = 0
+        Write-Host ""
+        Write-Host "Streak reset to 0.  Mastered so far: $($mastered.Count)/$total"
+
+        $reviewOk = Do-Review $mastered
+        if (-not $reviewOk) {
+            Write-Host ""
+            Write-Host "Exiting game. Goodbye!"
+            break
+        }
+
+        $pendingRetry = $proto
+        Write-Host ""
+        Write-Host "Now retrying the protocol you missed..."
+        Write-Host ""
     }
 }
+
+if ($mastered.Count -eq $total) {
+    Write-Host ""
+    Write-Host "======================================================"
+    Write-Host "  Congratulations! You mastered every protocol!"
+    Write-Host "======================================================"
+    Write-Host "Final streak: $streak"
+    Write-Host "Total protocols: $total"
+}
+
+Write-Host ""
+Read-Host "Press Enter to close"
 
 //make folder
 //put code into folder Program.cs

@@ -1,0 +1,13 @@
+Steps
+
+Open Notepad (press Win + R, type notepad, press Enter).
+Delete everything and paste the code below.
+Click File → Save As
+In the “Save as type” dropdown choose All Files (.)
+Name the file exactly:
+ports-game.ps1
+Save it somewhere easy (for example on your Desktop).
+
+Run this:
+
+powershell -ExecutionPolicy Bypass -File "C:\Users\javie\Desktop\ports-game.ps1"
