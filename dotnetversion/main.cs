@@ -1,5 +1,5 @@
 # Ports & Protocols Memorization Game
-# Pure PowerShell - no extra packages required
+# Strict perfect-pass version
 
 $Protocols = @(
     @{ Abbr = "HTTP";  Full = "HyperText Transfer Protocol"; Ports = @(80) },
@@ -71,17 +71,13 @@ function Display-Name($proto) {
     else { return $proto.Abbr }
 }
 
-function Ask-Protocol($proto, $isReview = $false) {
+function Ask-Protocol($proto) {
     $expected = @($proto.Ports | Sort-Object)
     $canon = Canonical-Ports $expected
     $name = Display-Name $proto
 
     Write-Host ""
-    if ($isReview) {
-        Write-Host "REVIEW --> Protocol: $name"
-    } else {
-        Write-Host "Protocol: $name"
-    }
+    Write-Host "Protocol: $name"
     Write-Host "Enter the port number(s) (separate multiple with /, any order is fine):"
 
     $answer = (Read-Host ">").Trim()
@@ -90,10 +86,11 @@ function Ask-Protocol($proto, $isReview = $false) {
     $userPorts = Normalize-Ports $answer
 
     if (Ports-Equal $userPorts $expected) {
-        if ($isReview) { Write-Host "  [Correct]" }
+        Write-Host "  [Correct]"
         return $true
     }
 
+    # Incorrect
     Write-Host ""
     Write-Host "[Incorrect] The correct answer is: $canon"
 
@@ -108,26 +105,6 @@ function Ask-Protocol($proto, $isReview = $false) {
     return $false
 }
 
-function Do-Review($mastered) {
-    if ($mastered.Count -eq 0) { return $true }
-
-    Write-Host ""
-    Write-Host "----------------------------------------"
-    Write-Host "  Reviewing previously mastered protocols"
-    Write-Host "  (shuffled order)"
-    Write-Host "----------------------------------------"
-
-    $reviewList = Shuffle $mastered
-    foreach ($proto in $reviewList) {
-        $result = Ask-Protocol $proto $true
-        if ($null -eq $result) { return $false }
-    }
-
-    Write-Host ""
-    Write-Host "-- Review complete --"
-    return $true
-}
-
 # ─── Main Game ────────────────────────────────────────────────────────────────
 Clear-Host
 Write-Host "======================================================"
@@ -135,94 +112,82 @@ Write-Host "     Ports & Protocols Memorization Game"
 Write-Host "     Brute-force learning through repetition"
 Write-Host "======================================================"
 Write-Host ""
-Write-Host "- Protocols are presented one at a time in random order."
-Write-Host "- Type the port(s) using / as separator (e.g. 20/21)."
-Write-Host "- On a miss you must type the correct answer, then re-answer"
-Write-Host "  every previously mastered protocol before retrying."
-Write-Host "- Score (streak) resets on any incorrect answer."
+Write-Host "- You must correctly answer the entire current pool"
+Write-Host "  before a new protocol is introduced."
+Write-Host "- Any mistake restarts the full pool (including the one you missed)."
+Write-Host "- Streak resets on every incorrect answer."
 Write-Host "- Type `"quit`" at any prompt to exit."
 Write-Host ""
 
 $remaining = @($Protocols)
-$mastered  = @()
+$seen      = @()
 $streak    = 0
-$pendingRetry = $null
 $total     = $Protocols.Count
 
-while ($mastered.Count -lt $total) {
-
-    if ($null -ne $pendingRetry) {
-        $proto = $pendingRetry
-    }
-    elseif ($remaining.Count -gt 0) {
-        $idx = Get-Random -Maximum $remaining.Count
-        $proto = $remaining[$idx]
-    }
-    else { break }
-
-    if ($null -ne $pendingRetry) {
-        Write-Host ""
-        Write-Host ">>> Retrying the protocol you previously missed <<<"
-    }
-
-    $result = Ask-Protocol $proto
-
-    if ($null -eq $result) {
-        Write-Host ""
-        Write-Host "Exiting game. Goodbye!"
-        break
-    }
-
-    if ($result -eq $true) {
-        if ($null -ne $pendingRetry) {
-            $pendingRetry = $null
-        }
-        else {
-            $remaining = @($remaining | Where-Object { $_ -ne $proto })
-        }
-
-        if ($mastered -notcontains $proto) {
-            $mastered += $proto
-        }
-
-        $streak++
-        Write-Host ""
-        Write-Host "[Correct!]  Streak: $streak  |  Mastered: $($mastered.Count)/$total"
-    }
-    else {
-        $streak = 0
-        Write-Host ""
-        Write-Host "Streak reset to 0.  Mastered so far: $($mastered.Count)/$total"
-
-        $reviewOk = Do-Review $mastered
-        if (-not $reviewOk) {
-            Write-Host ""
-            Write-Host "Exiting game. Goodbye!"
-            break
-        }
-
-        $pendingRetry = $proto
-        Write-Host ""
-        Write-Host "Now retrying the protocol you missed..."
-        Write-Host ""
-    }
+# Introduce the first protocol
+if ($remaining.Count -gt 0) {
+    $idx = Get-Random -Maximum $remaining.Count
+    $first = $remaining[$idx]
+    $seen += $first
+    $remaining = @($remaining | Where-Object { $_ -ne $first })
 }
 
-if ($mastered.Count -eq $total) {
+while ($seen.Count -le $total) {
+
+    $passList = Shuffle $seen
+    $perfectPass = $true
+
     Write-Host ""
-    Write-Host "======================================================"
-    Write-Host "  Congratulations! You mastered every protocol!"
-    Write-Host "======================================================"
-    Write-Host "Final streak: $streak"
-    Write-Host "Total protocols: $total"
+    Write-Host "----------------------------------------"
+    Write-Host "  Current pool size: $($seen.Count)/$total"
+    Write-Host "----------------------------------------"
+
+    foreach ($proto in $passList) {
+        $result = Ask-Protocol $proto
+
+        if ($null -eq $result) {
+            Write-Host ""
+            Write-Host "Exiting game. Goodbye!"
+            Read-Host "Press Enter to close"
+            exit
+        }
+
+        if ($result -eq $false) {
+            $streak = 0
+            Write-Host ""
+            Write-Host "Streak reset to 0. Restarting the full pool of $($seen.Count) protocol(s)..."
+            $perfectPass = $false
+            break
+        }
+    }
+
+    if (-not $perfectPass) {
+        continue   # Restart the same pool
+    }
+
+    # Perfect pass completed
+    $streak++
+    Write-Host ""
+    Write-Host "[Perfect pass!]  Streak: $streak  |  Pool: $($seen.Count)/$total"
+
+    if ($remaining.Count -gt 0) {
+        $idx = Get-Random -Maximum $remaining.Count
+        $next = $remaining[$idx]
+        $seen += $next
+        $remaining = @($remaining | Where-Object { $_ -ne $next })
+        Write-Host ""
+        Write-Host "New protocol added to the pool. Pool is now $($seen.Count) protocol(s)."
+    }
+    else {
+        break
+    }
 }
 
 Write-Host ""
+Write-Host "======================================================"
+Write-Host "  Congratulations! You mastered every protocol!"
+Write-Host "======================================================"
+Write-Host "Final streak: $streak"
+Write-Host "Total protocols: $total"
+Write-Host ""
 Read-Host "Press Enter to close"
-
-//make folder
-//put code into folder Program.cs
-//open cmd powershell then run this:
-//dotnet new console --force
-//Then run this:
-//dotnet run
