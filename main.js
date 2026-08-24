@@ -66,7 +66,6 @@ function shuffle(array) {
 }
 
 function normalizePorts(input) {
-  // Accept numbers separated by /, -, ,, or whitespace
   const nums = String(input)
     .split(/[\/\-\s,]+/)
     .map((s) => parseInt(s.trim(), 10))
@@ -102,20 +101,18 @@ function question(prompt) {
 
 // ─── Core ask function ───────────────────────────────────────────────────────
 /**
- * Asks for the ports of a protocol.
- * Returns: true (correct), false (incorrect, but acknowledged), or 'quit'
+ * Returns:
+ *   true   → answered correctly
+ *   false  → answered incorrectly (user already acknowledged the correct answer)
+ *   'quit' → user typed quit
  */
-async function askProtocol(proto, isReview = false) {
+async function askProtocol(proto) {
   const name = displayName(proto);
   const expected = [...proto.ports].sort((a, b) => a - b);
   const canon = canonicalPorts(expected);
 
   console.log('');
-  if (isReview) {
-    console.log(`REVIEW → Protocol: ${name}`);
-  } else {
-    console.log(`Protocol: ${name}`);
-  }
+  console.log(`Protocol: ${name}`);
   console.log('Enter the port number(s) (separate multiple with /, any order is fine):');
 
   const answer = (await question('> ')).trim();
@@ -124,47 +121,23 @@ async function askProtocol(proto, isReview = false) {
   const userPorts = normalizePorts(answer);
 
   if (portsEqual(userPorts, expected)) {
-    if (isReview) {
-      console.log('  ✓ Correct');
-    }
+    console.log('  ✓ Correct');
     return true;
   }
 
   // Incorrect
   console.log(`\n✗ Incorrect. The correct answer is: ${canon}`);
 
-  // Force the user to type the correct answer (acknowledgment)
+  // Force the user to type the correct answer
   while (true) {
     const ack = (await question('Type the correct port(s) to acknowledge: ')).trim();
     if (ack.toLowerCase() === 'quit') return 'quit';
-    if (portsEqual(normalizePorts(ack), expected)) {
-      break;
-    }
+    if (portsEqual(normalizePorts(ack), expected)) break;
     console.log('  That does not match. Please type the correct port(s).');
   }
 
   await question('Press Enter to continue...');
   return false;
-}
-
-// ─── Review helper ───────────────────────────────────────────────────────────
-async function doReview(mastered) {
-  if (mastered.length === 0) return 'ok';
-
-  console.log('\n────────────────────────────────────────');
-  console.log('  Reviewing previously mastered protocols');
-  console.log('  (shuffled order)');
-  console.log('────────────────────────────────────────');
-
-  const reviewList = shuffle(mastered);
-  for (const proto of reviewList) {
-    const result = await askProtocol(proto, true);
-    if (result === 'quit') return 'quit';
-    // Whether correct or forced-ack, continue to next
-  }
-
-  console.log('\n── Review complete ──');
-  return 'ok';
 }
 
 // ─── Main game loop ──────────────────────────────────────────────────────────
@@ -174,86 +147,75 @@ async function main() {
   console.log('║     Brute-force learning through repetition          ║');
   console.log('╚══════════════════════════════════════════════════════╝');
   console.log('');
-  console.log('• Protocols are presented one at a time in random order.');
-  console.log('• Type the port(s) using / as separator (e.g. 20/21).');
-  console.log('• On a miss you must type the correct answer, then re-answer');
-  console.log('  every previously mastered protocol before retrying.');
-  console.log('• Score (streak) resets on any incorrect answer.');
+  console.log('• You must correctly answer the entire current pool');
+  console.log('  before a new protocol is introduced.');
+  console.log('• Any mistake restarts the full pool (including the one you missed).');
+  console.log('• Streak resets on every incorrect answer.');
   console.log('• Type "quit" at any prompt to exit.\n');
 
   let remaining = [...PROTOCOLS];
-  let mastered = [];
+  let seen = [];          // protocols that have been introduced
   let streak = 0;
-  let pendingRetry = null;
   const total = PROTOCOLS.length;
 
-  while (mastered.length < total) {
-    // Decide which protocol to ask next
-    let proto;
-    if (pendingRetry) {
-      proto = pendingRetry;
-    } else if (remaining.length > 0) {
-      // Pick a random remaining protocol (do not remove yet)
-      const idx = Math.floor(Math.random() * remaining.length);
-      proto = remaining[idx];
-    } else {
-      // Should not happen, but safety
-      break;
-    }
+  // Introduce the first protocol
+  if (remaining.length > 0) {
+    const first = remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0];
+    seen.push(first);
+  }
 
-    const isRetry = pendingRetry !== null;
-    if (isRetry) {
-      console.log('\n>>> Retrying the protocol you previously missed <<<');
-    }
+  while (seen.length <= total) {
+    // Do a full pass over the current seen pool
+    const passList = shuffle(seen);
+    let perfectPass = true;
 
-    const result = await askProtocol(proto, false);
+    console.log('\n────────────────────────────────────────');
+    console.log(`  Current pool size: ${seen.length}/${total}`);
+    console.log('────────────────────────────────────────');
 
-    if (result === 'quit') {
-      console.log('\nExiting game. Goodbye!');
-      break;
-    }
+    for (const proto of passList) {
+      const result = await askProtocol(proto);
 
-    if (result === true) {
-      // Success
-      if (pendingRetry) {
-        pendingRetry = null;
-      } else {
-        // Remove from remaining
-        remaining = remaining.filter((p) => p !== proto);
-      }
-
-      // Avoid duplicate if somehow already present
-      if (!mastered.includes(proto)) {
-        mastered.push(proto);
-      }
-
-      streak += 1;
-      console.log(`\n✓ Correct!  Streak: ${streak}  |  Mastered: ${mastered.length}/${total}`);
-    } else {
-      // Miss
-      streak = 0;
-      console.log(`\nStreak reset to 0.  Mastered so far: ${mastered.length}/${total}`);
-
-      // Force review of everything already mastered
-      const reviewResult = await doReview(mastered);
-      if (reviewResult === 'quit') {
+      if (result === 'quit') {
         console.log('\nExiting game. Goodbye!');
-        break;
+        rl.close();
+        return;
       }
 
-      // Set up retry of the failed protocol on next iteration
-      pendingRetry = proto;
-      console.log('\nNow retrying the protocol you missed...\n');
+      if (result === false) {
+        // Mistake → reset streak and restart the entire pool
+        streak = 0;
+        console.log(`\nStreak reset to 0. Restarting the full pool of ${seen.length} protocol(s)...`);
+        perfectPass = false;
+        break; // break out of the for-loop → while-loop will start a new pass
+      }
+    }
+
+    if (!perfectPass) {
+      // Restart the same seen pool
+      continue;
+    }
+
+    // Perfect pass completed
+    streak += 1;
+    console.log(`\n✓ Perfect pass!  Streak: ${streak}  |  Pool: ${seen.length}/${total}`);
+
+    // If we still have remaining protocols, introduce a new one
+    if (remaining.length > 0) {
+      const next = remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0];
+      seen.push(next);
+      console.log(`\nNew protocol added to the pool. Pool is now ${seen.length} protocol(s).`);
+    } else {
+      // No more protocols left — player has mastered everything
+      break;
     }
   }
 
-  if (mastered.length === total) {
-    console.log('\n╔══════════════════════════════════════════════════════╗');
-    console.log('║  🎉  Congratulations! You mastered every protocol!   ║');
-    console.log('╚══════════════════════════════════════════════════════╝');
-    console.log(`Final streak: ${streak}`);
-    console.log(`Total protocols: ${total}`);
-  }
+  console.log('\n╔══════════════════════════════════════════════════════╗');
+  console.log('║  🎉  Congratulations! You mastered every protocol!   ║');
+  console.log('╚══════════════════════════════════════════════════════╝');
+  console.log(`Final streak: ${streak}`);
+  console.log(`Total protocols: ${total}`);
 
   rl.close();
 }
