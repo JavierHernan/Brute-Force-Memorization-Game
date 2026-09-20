@@ -1,6 +1,10 @@
 # Ports & Protocols Memorization Game
 # Strict perfect-pass version
 
+# Ports & Protocols Memorization Game
+# Strict perfect-pass version (matches the latest JavaScript logic)
+# Runs on stock Windows PowerShell – no extra packages needed
+
 $Protocols = @(
     @{ Abbr = "HTTP";  Full = "HyperText Transfer Protocol"; Ports = @(80) },
     @{ Abbr = "HTTPS"; Full = "HyperText Transfer Protocol Secure"; Ports = @(443) },
@@ -67,21 +71,27 @@ function Canonical-Ports($ports) {
 }
 
 function Display-Name($proto) {
-    if ($proto.Full) { return "$($proto.Abbr) - $($proto.Full)" }
-    else { return $proto.Abbr }
+    if ($proto.Full) {
+        return "$($proto.Abbr) - $($proto.Full)"
+    }
+    else {
+        return $proto.Abbr
+    }
 }
 
 function Ask-Protocol($proto) {
     $expected = @($proto.Ports | Sort-Object)
-    $canon = Canonical-Ports $expected
-    $name = Display-Name $proto
+    $canon    = Canonical-Ports $expected
+    $name     = Display-Name $proto
 
     Write-Host ""
     Write-Host "Protocol: $name"
     Write-Host "Enter the port number(s) (separate multiple with /, any order is fine):"
 
     $answer = (Read-Host ">").Trim()
-    if ($answer -eq "" -or $answer -eq "quit") { return $null }
+    if ($answer -eq "" -or $answer.ToLower() -eq "quit") {
+        return $null   # quit
+    }
 
     $userPorts = Normalize-Ports $answer
 
@@ -96,8 +106,12 @@ function Ask-Protocol($proto) {
 
     while ($true) {
         $ack = (Read-Host "Type the correct port(s) to acknowledge").Trim()
-        if ($ack -eq "" -or $ack -eq "quit") { return $null }
-        if (Ports-Equal (Normalize-Ports $ack) $expected) { break }
+        if ($ack -eq "" -or $ack.ToLower() -eq "quit") {
+            return $null
+        }
+        if (Ports-Equal (Normalize-Ports $ack) $expected) {
+            break
+        }
         Write-Host "  That does not match. Please type the correct port(s)."
     }
 
@@ -126,7 +140,7 @@ $total     = $Protocols.Count
 
 # Introduce the first protocol
 if ($remaining.Count -gt 0) {
-    $idx = Get-Random -Maximum $remaining.Count
+    $idx   = Get-Random -Maximum $remaining.Count
     $first = $remaining[$idx]
     $seen += $first
     $remaining = @($remaining | Where-Object { $_ -ne $first })
@@ -134,7 +148,7 @@ if ($remaining.Count -gt 0) {
 
 while ($seen.Count -le $total) {
 
-    $passList = Shuffle $seen
+    $passList    = Shuffle $seen
     $perfectPass = $true
 
     Write-Host ""
@@ -153,6 +167,7 @@ while ($seen.Count -le $total) {
         }
 
         if ($result -eq $false) {
+            # Mistake → reset streak and restart the entire pool
             $streak = 0
             Write-Host ""
             Write-Host "Streak reset to 0. Restarting the full pool of $($seen.Count) protocol(s)..."
@@ -162,7 +177,7 @@ while ($seen.Count -le $total) {
     }
 
     if (-not $perfectPass) {
-        continue   # Restart the same pool
+        continue   # Restart the same seen pool
     }
 
     # Perfect pass completed
@@ -171,7 +186,7 @@ while ($seen.Count -le $total) {
     Write-Host "[Perfect pass!]  Streak: $streak  |  Pool: $($seen.Count)/$total"
 
     if ($remaining.Count -gt 0) {
-        $idx = Get-Random -Maximum $remaining.Count
+        $idx  = Get-Random -Maximum $remaining.Count
         $next = $remaining[$idx]
         $seen += $next
         $remaining = @($remaining | Where-Object { $_ -ne $next })
@@ -179,6 +194,7 @@ while ($seen.Count -le $total) {
         Write-Host "New protocol added to the pool. Pool is now $($seen.Count) protocol(s)."
     }
     else {
+        # No more protocols left
         break
     }
 }
